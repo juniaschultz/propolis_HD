@@ -1,0 +1,69 @@
+###### Project - Propolis_HD - Correlation analysis ######
+
+library(devtools)
+library(pairwiseAdonis)
+library(qiime2R)
+library(phyloseq)
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(gplots)
+library(vegan)
+library(DESeq2)
+library(readxl)
+library(dplyr)
+library(reshape2)
+library(ggthemes)
+library(ape)
+library(metagMisc)
+library(microbiome)
+library(microViz)
+library(corrplot)
+
+#Importing OTU table
+otu.tab.filt <- read.table("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_OTU.txt")
+OTU.pro.filt = otu_table(otu.tab.filt, taxa_are_rows = TRUE)
+OTU.pro.filt
+
+#Importing the taxonomic table
+tax.tab.pro.filt <- read.table("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_TAX.txt")
+tax.tab.df.pro.filt <- data.frame(tax.tab.pro.filt)
+tax.tab.m.pro.filt <- as.matrix((tax.tab.df.pro.filt))
+TAX.pro.filt = tax_table(tax.tab.m.pro.filt)
+TAX.pro.filt
+
+#Creating phyloseq file
+physeq.pro.filt = phyloseq(OTU.pro.filt, TAX.pro.filt)
+physeq.pro.filt
+
+#Creating phylogenetic tree
+dev.sub_tree = rtree(ntaxa(physeq.pro.filt), rooted=TRUE, tip.label=taxa_names(physeq.pro.filt))
+#plot(dev.sub_tree)
+
+#Importing metadata table
+data.pro = read.csv("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_metadata.txt")
+sample.data.pro = sample_data(data.pro)
+sample.data.pro
+rownames(sample.data.pro) <- sample_names(physeq.pro.filt)
+
+#Creating phyloseq file with metadata
+physeq = phyloseq(OTU.pro.filt, TAX.pro.filt, sample.data.pro, dev.sub_tree)
+
+ps = physeq
+
+#Creating a correlation plot
+
+sub <- subset_taxa(ps, !Kingdom %in% c("Eukaryota", "Unassigned"))
+ps <- sub
+
+test_bac = aggregate_rare(ps, level = "Phylum", detection = 1/10, prevalence = 10/100)
+test_bac1 = transform(test_bac1, "clr")
+test_bac2 = as.data.frame(otu_table(test_bac1))
+corre2 = cbind(t(test_bac2), sample.data.pro)
+colnames(corre2)
+M2 = cor(corre2[c(1:12,14:18,71:73)], method = "pearson")
+corrplot(M2, method = 'number') 
+corrplot(M2, method = 'square', order = 'FPC', type = 'lower', diag = FALSE)
+testRes = cor.mtest(corre2[c(1:12,14:18,71:73)], conf.level = 0.95)
+corrplot(M2, p.mat = testRes$p, method = 'square', type = 'lower', insig='blank', tl.srt = 45, tl.col = "black", tl.cex = 0.7,
+         number.cex = 0.8, order = 'original', diag=FALSE)
