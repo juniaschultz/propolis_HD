@@ -1,0 +1,100 @@
+###### Project - Propolis_HD - Alpha-diversity ######
+
+library(qiime2R)
+library(phyloseq)
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(gplots)
+library(vegan)
+library(DESeq2)
+library(readxl)
+library(dplyr)
+library(reshape2)
+library(ggthemes)
+library(ape)
+
+#Importing OTU table
+otu.tab.filt <- read.table("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_OTU.txt")
+OTU.pro.filt = otu_table(otu.tab.filt, taxa_are_rows = TRUE)
+OTU.pro.filt
+
+#Importing the taxonomic table
+tax.tab.pro.filt <- read.table("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_TAX.txt")
+tax.tab.df.pro.filt <- data.frame(tax.tab.pro.filt)
+tax.tab.m.pro.filt <- as.matrix((tax.tab.df.pro.filt))
+TAX.pro.filt = tax_table(tax.tab.m.pro.filt)
+TAX.pro.filt
+
+#Creating phyloseq file
+physeq.pro.filt = phyloseq(OTU.pro.filt, TAX.pro.filt)
+physeq.pro.filt
+
+#Creating phylogenetic tree
+dev.sub_tree = rtree(ntaxa(physeq.pro.filt), rooted=TRUE, tip.label=taxa_names(physeq.pro.filt))
+#plot(dev.sub_tree)
+
+#Importing metadata table
+data.pro = read.csv("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_metadata.txt")
+sample.data.pro = sample_data(data.pro)
+sample.data.pro
+rownames(sample.data.pro) <- sample_names(physeq.pro.filt)
+
+#Creating phyloseq file with metadata
+physeq = phyloseq(OTU.pro.filt, TAX.pro.filt, sample.data.pro, dev.sub_tree)
+
+ps = physeq
+
+##### Checking the data ####
+
+sort(sample_sums(ps))
+
+hist(sample_sums(ps), main="Histogram: Read Counts", xlab="Total Reads", 
+     border="black", col="blue", las=1, breaks=20)
+
+mat <- as(t(otu_table(ps)), "matrix")
+class(mat)
+
+raremax <- min(rowSums(mat))
+raremax
+
+system.time(rarecurve(mat, step = 100, sample = raremax, col = "blue", label = FALSE, cex = 1, lwd = 1))
+
+S <- specnumber(t(otu_table(ps)))
+set.seed(99999666)
+ps.rare <- rarefy_even_depth(ps, sample.size = min(sample_sums(ps)))
+ps.rare
+
+sample_data(ps.rare)$Period <- factor(sample_data(ps.rare)$Period, levels = c("Pre","Post"))
+
+Srare <- specnumber(t(otu_table(ps.rare)))
+sample_sums(ps.rare)
+
+hist(sample_sums(ps.rare), main="Histogram: Read Counts", xlab="Total Reads", 
+     border="black", col="blue", las=1, breaks=12)
+
+plot(S, Srare, xlab = "Observed Number of Species", ylab = "Rarefied Number of Species",  border="black", col="blue", las=1, 
+     breaks=12)
+abline(0, 1)
+
+##### Alpha-diversity analysis ####
+
+sample_data(ps.rare)$Chao1 <- estimate_richness(ps.rare, measures="Chao1", split = TRUE)[,1]
+sample_data(ps.rare)$Shannon <- estimate_richness(ps.rare, measures="Shannon", split = TRUE)[,1]
+sample_data(ps.rare)$Observed <- estimate_richness(ps.rare,measures="Observed", split = TRUE)[,1]
+sample_data(ps.rare)$InvSimpson <- estimate_richness(ps.rare,measures="InvSimpson", split = TRUE)[,1]
+
+alpha <- estimate_richness(ps.rare, measures = c("Shannon", "InvSimpson", 'Chao1', 'Observed'))
+alpha
+write.table(alpha, "/Users/schultj/Desktop/Denise_projects/Propolis/Results/alpha-diversity.txt", sep = "\t")
+
+#Generating the plot for alpha-diversity
+
+plot.obs <- plot_richness(ps.rare, x="Group", color="Period", nrow=1, measures=c("Shannon","Observed")) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5, size=10, color = "black")) 
+
+plot.obs
+plot.obs1 = plot.obs  + scale_color_manual(values=c("#70AD47",  "#C55A11" ))
+plot.obs1
