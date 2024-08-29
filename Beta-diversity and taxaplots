@@ -76,6 +76,24 @@ normalized <- ps
 otu_table(normalized) <- otu_table(vst.otu.counts)
 normalized
 
+#Statistics
+
+unifrac_dist <- phyloseq::distance(normalized, method="unifrac", weighted=T)
+sd.table <- data.frame(sample_data(normalized))
+summary(sd.table)
+write.table(sd.table, "/Users/schultj/Desktop/Denise_projects/Propolis/Results/unifrac-table.txt", sep = "\t")
+
+# Adonis -> permanova
+adonis2(unifrac_dist ~ Group, data = sd.table)
+
+# Anosim
+dist <- anosim(unifrac_dist, sd.table$Group, permutations = 999)
+summary(dist)
+
+# Betadisper e Anova
+betadisper(unifrac_dist, sd.table$Group)
+anova(betadisper(unifrac_dist, sd.table$Group))
+
 #### Plots ####
 
 #Phylum
