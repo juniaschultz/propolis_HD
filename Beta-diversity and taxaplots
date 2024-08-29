@@ -1,0 +1,172 @@
+###### Project - Propolis_HD - Beta-diversity and taxaplots ######
+
+library(devtools)
+library(pairwiseAdonis)
+library(qiime2R)
+library(phyloseq)
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(gplots)
+library(vegan)
+library(DESeq2)
+library(readxl)
+library(dplyr)
+library(reshape2)
+library(ggthemes)
+library(ape)
+library(metagMisc)
+
+#Importing OTU table
+otu.tab.filt <- read.table("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_OTU.txt")
+OTU.pro.filt = otu_table(otu.tab.filt, taxa_are_rows = TRUE)
+OTU.pro.filt
+
+#Importing the taxonomic table
+tax.tab.pro.filt <- read.table("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_TAX.txt")
+tax.tab.df.pro.filt <- data.frame(tax.tab.pro.filt)
+tax.tab.m.pro.filt <- as.matrix((tax.tab.df.pro.filt))
+TAX.pro.filt = tax_table(tax.tab.m.pro.filt)
+TAX.pro.filt
+
+#Creating phyloseq file
+physeq.pro.filt = phyloseq(OTU.pro.filt, TAX.pro.filt)
+physeq.pro.filt
+
+#Creating phylogenetic tree
+dev.sub_tree = rtree(ntaxa(physeq.pro.filt), rooted=TRUE, tip.label=taxa_names(physeq.pro.filt))
+#plot(dev.sub_tree)
+
+#Importing metadata table
+data.pro = read.csv("/Users/schultj/Desktop/Denise_projects/Propolis/Propolis_metadata.txt")
+sample.data.pro = sample_data(data.pro)
+sample.data.pro
+rownames(sample.data.pro) <- sample_names(physeq.pro.filt)
+
+#Creating phyloseq file with metadata
+physeq = phyloseq(OTU.pro.filt, TAX.pro.filt, sample.data.pro, dev.sub_tree)
+
+ps = physeq
+
+#### Beta-diversity analysis ####
+
+#Removing OTUs
+
+sub1 <- subset_taxa(ps, !Kingdom %in% c("Eukaryota", "Unassigned"))
+sub1 = ps
+
+#Normalizing the data
+
+dsd <-phyloseq_to_deseq2(ps, ~Group) 
+dsd
+cts <- counts(dsd)
+table(cts)
+geoMeans <- apply(cts, 1, function(row) if (all(row == 0)) 0 else exp(mean(log(row[row != 0]))))
+diagdds = estimateSizeFactors(dsd, geoMeans = geoMeans)
+dds = estimateDispersions(diagdds)
+
+vst<- varianceStabilizingTransformation(dds, blind=FALSE)
+
+deseq2 <- varianceStabilizingTransformation(dds, blind = TRUE, fitType = "parametric")
+vstMat<- assay(vst)
+vstMat[vstMat<0]<-0
+vst.otu.counts<-otu_table(vstMat, taxa_are_rows=TRUE)
+
+normalized <- ps
+otu_table(normalized) <- otu_table(vst.otu.counts)
+normalized
+
+#### Plots ####
+
+#Phylum
+
+nor.phy <- tax_glom(normalized, "Phylum")
+nor.phy.ra  = transform_sample_counts(nor.phy,
+                                      function(x) x / sum(x))
+
+nor.phy.ra.top = filter_taxa(nor.phy.ra,
+                             function(x) mean(x) > 1e-2,TRUE)
+
+nor.phy.ra.top.ra = transform_sample_counts(nor.phy.ra.top,
+                                            function(x) x / sum(x))
+
+nor.phy.ra.top.ra.prune = prune_taxa(names(sort(taxa_sums(nor.phy.ra.top.ra),
+                                                TRUE)) [1:20],nor.phy.ra.top.ra)
+
+sample_data(nor.phy.ra.top.ra.prune)$Period <- factor(sample_data(nor.phy.ra.top.ra.prune)$Period, levels = c("Pre","Post"))
+
+plot_bar_phy <- plot_bar(nor.phy.ra.top.ra.prune, x="Sample" ,fill="Phylum") +
+  facet_grid (~ Group + Period, scales = "free_x", space = "free")
+
+plot_bar_phy
+
+#Family
+
+nor.fami <- tax_glom(normalized, "Family")
+nor.fami.ra  = transform_sample_counts(nor.fami,
+                                       function(x) x / sum(x))
+
+nor.fami.ra.top = filter_taxa(nor.fami.ra,
+                              function(x) mean(x) > 1e-2,TRUE)
+
+nor.fami.ra.top.ra = transform_sample_counts(nor.fami.ra.top,
+                                             function(x) x / sum(x))
+
+nor.fami.ra.top.ra.prune = prune_taxa(names(sort(taxa_sums(nor.fami.ra.top.ra),
+                                                 TRUE)) [1:20],nor.fami.ra.top.ra)
+
+sample_data(nor.fami.ra.top.ra.prune)$Period <- factor(sample_data(nor.fami.ra.top.ra.prune)$Period, levels = c("Pre","Post"))
+
+plot_bar_family <- plot_bar(nor.fami.ra.top.ra.prune, x="Sample" ,fill="Family") +
+  facet_grid (~ Group + Period, scales = "free_x", space = "free")
+
+plot_bar_family
+
+plot_bar_family + scale_fill_manual(values=c("#9EDAE5", "#FF7F0E", "#2CA02C", "#D62728", "#C5B0D5",
+                                             "#8C564B", "#E377C2", "#BCBD22", "#17BECF",
+                                             "#AEC7E8", "#FFBC78", "#98DF8A", "#FF9896", "#9467BD",
+                                             "#C49C94", "#F7B6D2", "#C7C7C7", "#DBDB8D", "#9EDAE5"))
+
+
+#Genus
+
+nor.g <- tax_glom(normalized, "Genus")
+nor.g.ra  = transform_sample_counts(nor.g,
+                                    function(x) x / sum(x))
+
+nor.g.ra.top = filter_taxa(nor.g.ra,
+                           function(x) mean(x) > 1e-2, TRUE)
+
+nor.g.ra.top.ra = transform_sample_counts(nor.g.ra.top,
+                                          function(x) x / sum(x))
+
+nor.g.ra.top.ra.prune = prune_taxa(names(sort(taxa_sums(nor.g.ra.top.ra),
+                                              TRUE)) [1:20],nor.g.ra.top.ra)
+
+sample_data(nor.g.ra.top.ra.prune)$Period <- factor(sample_data(nor.g.ra.top.ra.prune)$Period, levels = c("Pre","Post"))
+
+plot_bar_genus <- plot_bar(nor.g.ra.top.ra.prune, x="Sample" ,fill="Genus") +
+  facet_grid (~ Group + Period, scales = "free_x", space = "free")
+
+plot_bar_genus
+
+plot_bar_genus + scale_fill_manual(values=c("#ffa143",
+                                             "#ff44f3",
+                                            "#810019",
+                                             "#5dd900",
+                                            "#007abf",
+                                            "#02f0e6",
+                                             "#2c005e",
+                                             "#c0004d",
+                                             "#f3ffab",
+                                            "#24ff96",
+                                             "#609200",
+                                             "#ff879f",
+                                             "#007a59",
+                                             "#450d00",
+                                             "#fff3fe",
+                                             "#623b00",
+                                            "#ff8875",
+                                             "#00404f",
+                                             "#ffc47c",
+                                            "#005c13"))
